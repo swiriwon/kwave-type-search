@@ -1,3 +1,5 @@
+// filename: main.js
+
 import { Actor } from 'apify';
 import { PuppeteerCrawler, log } from '@crawlee/puppeteer';
 import fs from 'fs';
@@ -18,6 +20,7 @@ const outputFolder = '/home/myuser/app/output/';
 const filePath = path.join(outputFolder, 'product_names.csv');
 
 if (!fs.existsSync(outputFolder)) {
+    log.info(`Creating directory: ${outputFolder}`);
     fs.mkdirSync(outputFolder, { recursive: true });
 }
 
@@ -27,57 +30,56 @@ const crawler = new PuppeteerCrawler({
     launchContext: {
         launchOptions: {
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        },
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        }
     },
-    requestHandlerTimeoutSecs: 300,
-    navigationTimeoutSecs: 120,
+    requestHandlerTimeoutSecs: 120,
+    navigationTimeoutSecs: 60,
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
+
         await page.goto(request.url, { waitUntil: 'networkidle2' });
 
-        await page.waitForSelector('.prd_list_area', { timeout: 30000 });
-
-        // Set 48 items per view if selector exists
-        const view48 = await page.$('button[title="48개씩 보기"]');
-        if (view48) {
-            log.info('Switching to 48 items per view...');
-            await view48.click();
-            await page.waitForTimeout(3000);
+        try {
+            await page.waitForSelector('.prd_list_area li, .prd_list_type li', { timeout: 45000 });
+        } catch (e) {
+            log.error('❌ Selector timeout, saving screenshot...');
+            await page.screenshot({ path: path.join(outputFolder, 'timeout.png') });
+            throw e;
         }
 
+        // Set to view 48 products per click
+        await page.select('select[name="rows"]', '48');
+        await page.waitForTimeout(3000);
+
+        let lastLoaded = 0;
         while (true) {
-            await page.waitForSelector('.brand-info', { timeout: 30000 });
+            const newCount = await page.$$eval('.prd_list_area li', els => els.length);
+            if (newCount <= lastLoaded) break;
+            lastLoaded = newCount;
 
-            const data = await page.evaluate(() => {
-                const rows = [];
-                document.querySelectorAll('.brand-info').forEach((el) => {
-                    const brand = el.querySelector('dt')?.innerText?.trim() || '';
-                    const product = el.querySelector('dd')?.innerText?.trim() || '';
-                    if (brand && product) {
-                        rows.push({ url: window.location.href, brand, product });
-                    }
-                });
-                return rows;
-            });
-
-            collectedData.push(...data);
-
-            const moreText = await page.$eval('.more .count', el => el.textContent.trim()).catch(() => '');
             const moreBtn = await page.$('.more .btn');
+            if (!moreBtn) break;
 
-            log.info(`Loaded: ${moreText}`);
-            if (moreText.includes('43 / 43') || !moreBtn) {
-                log.info('Reached final batch. Exiting...');
-                break;
-            }
-
-            log.info('Clicking MORE button...');
+            log.info(`Clicking MORE button... (${newCount} items)`);
             await moreBtn.evaluate(el => el.click());
-            await page.waitForTimeout(3000);
+            await page.waitForTimeout(3500);
         }
 
-        log.info(`Finished collecting items.`);
+        const data = await page.evaluate(() => {
+            const rows = [];
+            document.querySelectorAll('.prd_list_area li').forEach((el) => {
+                const brand = el.querySelector('.brand-info dt')?.innerText?.trim() || '';
+                const product = el.querySelector('.brand-info dd')?.innerText?.trim() || '';
+                if (brand && product) {
+                    rows.push({ url: window.location.href, brand, product });
+                }
+            });
+            return rows;
+        });
+
+        collectedData.push(...data);
+        log.info(`Collected ${data.length} items from page.`);
     },
 });
 
@@ -89,4 +91,5 @@ fs.writeFileSync(filePath, [csvHeader, ...csvRows].join('\n'));
 
 log.info(`✅ File saved to ${filePath}`);
 await Actor.pushData(collectedData);
+
 await Actor.exit();

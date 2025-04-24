@@ -34,62 +34,58 @@ const crawler = new PuppeteerCrawler({
         }
     },
     requestHandlerTimeoutSecs: 120,
-    navigationTimeoutSecs: 60,
+    navigationTimeoutSecs: 90,
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
 
-        await page.goto(request.url, { waitUntil: 'networkidle2' });
+        await page.goto(request.url, { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('#categoryProductList', { timeout: 60000 });
 
-        try {
-            await page.waitForSelector('.prd_list_area li, .prd_list_type li', { timeout: 45000 });
-        } catch (e) {
-            log.error('❌ Selector timeout, saving screenshot...');
-            await page.screenshot({ path: path.join(outputFolder, 'timeout.png') });
-            throw e;
+        // Set view mode to 48 items per click (if exists)
+        const view48 = await page.$('button[data-page-size="48"]');
+        if (view48) {
+            await view48.click();
+            await page.waitForTimeout(3000);
         }
 
-        // Set to view 48 products per click
-        await page.select('select[name="rows"]', '48');
-        await page.waitForTimeout(3000);
-
-        let lastLoaded = 0;
+        // Click MORE button repeatedly
         while (true) {
-            const newCount = await page.$$eval('.prd_list_area li', els => els.length);
-            if (newCount <= lastLoaded) break;
-            lastLoaded = newCount;
-
             const moreBtn = await page.$('.more .btn');
             if (!moreBtn) break;
+            await moreBtn.evaluate(btn => btn.click());
+            await page.waitForTimeout(3000);
 
-            log.info(`Clicking MORE button... (${newCount} items)`);
-            await moreBtn.evaluate(el => el.click());
-            await page.waitForTimeout(3500);
+            // Wait until products grow
+            await page.waitForFunction(() => {
+                return document.querySelectorAll('#categoryProductList > li').length > 0;
+            }, { timeout: 60000 });
         }
 
+        // Extract product data
         const data = await page.evaluate(() => {
-            const rows = [];
-            document.querySelectorAll('.prd_list_area li').forEach((el) => {
+            const items = [];
+            document.querySelectorAll('#categoryProductList > li').forEach((el) => {
                 const brand = el.querySelector('.brand-info dt')?.innerText?.trim() || '';
                 const product = el.querySelector('.brand-info dd')?.innerText?.trim() || '';
+                const href = el.querySelector('a')?.href || '';
                 if (brand && product) {
-                    rows.push({ url: window.location.href, brand, product });
+                    items.push({ url: href, brand, product });
                 }
             });
-            return rows;
+            return items;
         });
 
         collectedData.push(...data);
-        log.info(`Collected ${data.length} items from page.`);
+        log.info(`Extracted ${data.length} products.`);
     },
 });
 
 await crawler.run([START_URL]);
 
 const csvHeader = 'url,brand,product';
-const csvRows = collectedData.map(r => `${r.url},${r.brand},${r.product}`);
+const csvRows = collectedData.map(r => `${r.url},"${r.brand}","${r.product}"`);
 fs.writeFileSync(filePath, [csvHeader, ...csvRows].join('\n'));
 
 log.info(`✅ File saved to ${filePath}`);
 await Actor.pushData(collectedData);
-
 await Actor.exit();

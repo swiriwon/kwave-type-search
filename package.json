@@ -7,6 +7,6 @@
     "@crawlee/puppeteer": "^3.13.2"
   },
   "scripts": {
-    "start": "node main.js"
+    "start": "node --experimental-specifier-resolution=node main.js"
   }
 }

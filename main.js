@@ -37,8 +37,6 @@ const crawler = new PuppeteerCrawler({
         log.info(`Processing ${request.url}`);
 
         try {
-            await page.waitForSelector('.prd_list_area', { timeout: 60000 });
-
             // Try selecting 48 view mode
             const selectBox = await page.$('.select-box');
             if (selectBox) {
@@ -58,12 +56,14 @@ const crawler = new PuppeteerCrawler({
 
             // Keep clicking MORE button until it's gone or max tries
             let tries = 0;
-            while (tries < 60) {
+            while (tries < 70) {
                 const moreBtn = await page.$('.more .btn');
                 if (!moreBtn) break;
-                await moreBtn.click();
-                await page.waitForTimeout(3000);
+                await moreBtn.evaluate(el => el.click());
+                await page.waitForTimeout(2500);
+                await page.evaluate(() => window.scrollBy(0, 1000));
                 tries++;
+                log.info(`Clicked MORE button [${tries}]`);
             }
 
             await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 30000 });

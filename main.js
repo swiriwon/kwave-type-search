@@ -39,10 +39,11 @@ const crawler = new PuppeteerCrawler({
         crawlerLog.info(`Processing ${request.url}`);
 
         try {
-            await page.waitForSelector('.option-list button', { timeout: 60000 });
-            const viewButtons = await page.$$('.option-list button');
-            for (const btn of viewButtons) {
-                const text = await page.evaluate(el => el.innerText.trim(), btn);
+            await page.waitForSelector('.option-list', { timeout: 60000 });
+            const buttons = await page.$$('.option-list button');
+
+            for (const btn of buttons) {
+                const text = await page.evaluate(el => el.textContent.trim(), btn);
                 if (text.includes('48')) {
                     crawlerLog.info('Switching to 48 view mode...');
                     await btn.click();

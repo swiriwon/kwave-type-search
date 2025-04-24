@@ -18,9 +18,7 @@ log.info('Starting scraper...');
 
 const outputFolder = '/home/myuser/app/output/';
 const filePath = path.join(outputFolder, 'product_names.csv');
-
 if (!fs.existsSync(outputFolder)) {
-    log.info(`Creating directory: ${outputFolder}`);
     fs.mkdirSync(outputFolder, { recursive: true });
 }
 
@@ -33,42 +31,38 @@ const crawler = new PuppeteerCrawler({
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         }
     },
-    requestHandlerTimeoutSecs: 260,
-    navigationTimeoutSecs: 100,
+    requestHandlerTimeoutSecs: 120,
+    navigationTimeoutSecs: 60,
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
 
-        await page.goto(request.url, { waitUntil: 'networkidle2' });
+        await page.waitForSelector('.option-list button', { timeout: 30000 });
+        await page.click('.option-list button');
 
-        await page.waitForSelector('#categoryProductList', { timeout: 90000 });
+        const option48Selector = '.option-list li button[data-value="48"]';
+        await page.waitForSelector(option48Selector, { timeout: 10000 });
+        await page.click(option48Selector);
+        await page.waitForTimeout(3000);
 
-        // Switch to view 48 items per page
-        const view48Selector = '.sort-area .sort-box .option-list button[data-viewcnt="48"]';
-        const view48Btn = await page.$(view48Selector);
-        if (view48Btn) {
-            await view48Btn.click();
-            await page.waitForTimeout(9000);
-        }
-
-        // Click "More" until all products are loaded
-        while (true) {
+        let loadMoreVisible = true;
+        while (loadMoreVisible) {
             const moreBtn = await page.$('.more .btn');
-            if (!moreBtn) break;
-
-            const disabled = await moreBtn.evaluate(el => el.classList.contains('disabled'));
-            if (disabled) break;
-
-            log.info('Clicking MORE button...');
-            await moreBtn.evaluate(el => el.click());
-            await page.waitForTimeout(9000);
+            if (moreBtn) {
+                log.info('Clicking MORE button...');
+                await moreBtn.click();
+                await page.waitForTimeout(3000);
+            } else {
+                loadMoreVisible = false;
+            }
         }
 
-        log.info('Extracting data...');
+        await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 30000 });
+
         const data = await page.evaluate(() => {
             const rows = [];
-            document.querySelectorAll('#categoryProductList .prd-unit').forEach(el => {
-                const brand = el.querySelector('.brand-info dt')?.innerText?.trim() || '';
-                const product = el.querySelector('.brand-info dd')?.innerText?.trim() || '';
+            document.querySelectorAll('#categoryProductList .prd-unit').forEach((unit) => {
+                const brand = unit.querySelector('.brand-info dt')?.innerText.trim() || '';
+                const product = unit.querySelector('.brand-info dd')?.innerText.trim() || '';
                 if (brand && product) {
                     rows.push({ url: window.location.href, brand, product });
                 }

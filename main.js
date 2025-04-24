@@ -30,43 +30,45 @@ const crawler = new PuppeteerCrawler({
     launchContext: {
         launchOptions: {
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        },
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
+        }
     },
-    requestHandlerTimeoutSecs: 120,
-    navigationTimeoutSecs: 60,
+    requestHandlerTimeoutSecs: 260,
+    navigationTimeoutSecs: 100,
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
 
         await page.goto(request.url, { waitUntil: 'networkidle2' });
 
-        await page.waitForSelector('#categoryProductList', { timeout: 30000 });
+        await page.waitForSelector('#categoryProductList', { timeout: 90000 });
 
-        await page.evaluate(() => {
-            const select = document.querySelector('select[name="rows"]');
-            if (select) select.value = "48";
-            select?.dispatchEvent(new Event('change', { bubbles: true }));
-        });
-
-        await page.waitForTimeout(3000);
-
-        let loadCount = 0;
-        while (true) {
-            const moreButton = await page.$('.more .btn');
-            if (!moreButton) break;
-            await moreButton.click();
-            loadCount++;
-            log.info(`Clicked MORE button (${loadCount})`);
-            await page.waitForTimeout(3000);
+        // Switch to view 48 items per page
+        const view48Selector = '.sort-area .sort-box .option-list button[data-viewcnt="48"]';
+        const view48Btn = await page.$(view48Selector);
+        if (view48Btn) {
+            await view48Btn.click();
+            await page.waitForTimeout(9000);
         }
 
-        await page.waitForSelector('.brand-info', { timeout: 20000 });
+        // Click "More" until all products are loaded
+        while (true) {
+            const moreBtn = await page.$('.more .btn');
+            if (!moreBtn) break;
 
+            const disabled = await moreBtn.evaluate(el => el.classList.contains('disabled'));
+            if (disabled) break;
+
+            log.info('Clicking MORE button...');
+            await moreBtn.evaluate(el => el.click());
+            await page.waitForTimeout(9000);
+        }
+
+        log.info('Extracting data...');
         const data = await page.evaluate(() => {
             const rows = [];
-            document.querySelectorAll('.brand-info').forEach((el) => {
-                const brand = el.querySelector('dt')?.innerText?.trim() || '';
-                const product = el.querySelector('dd')?.innerText?.trim() || '';
+            document.querySelectorAll('#categoryProductList .prd-unit').forEach(el => {
+                const brand = el.querySelector('.brand-info dt')?.innerText?.trim() || '';
+                const product = el.querySelector('.brand-info dd')?.innerText?.trim() || '';
                 if (brand && product) {
                     rows.push({ url: window.location.href, brand, product });
                 }
@@ -74,8 +76,8 @@ const crawler = new PuppeteerCrawler({
             return rows;
         });
 
-        collectedData.push(...data);
         log.info(`Extracted ${data.length} products.`);
+        collectedData.push(...data);
     },
 });
 

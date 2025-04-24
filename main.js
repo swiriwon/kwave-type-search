@@ -9,6 +9,7 @@ await Actor.init();
 
 const input = await Actor.getInput();
 const START_URL = input.startUrl;
+const BRAND_LETTER = input.brandLetter || null;
 
 if (!START_URL || typeof START_URL !== 'string' || !START_URL.startsWith('http')) {
     throw new Error('Missing or invalid input URL. Please provide a full URL in the input field as "startUrl".');
@@ -24,6 +25,7 @@ if (!fs.existsSync(outputFolder)) {
 }
 
 const collectedData = [];
+const MAX_PRODUCTS = 1000;
 
 const crawler = new PuppeteerCrawler({
     launchContext: {
@@ -38,20 +40,31 @@ const crawler = new PuppeteerCrawler({
         crawlerLog.info(`Processing ${request.url}`);
 
         try {
-            await page.waitForSelector('.option-list', { timeout: 60000 });
-            const buttons = await page.$$('.option-list button');
-
-            for (const btn of buttons) {
-                const text = await page.evaluate(el => el.textContent.trim(), btn);
-                if (text.includes('48')) {
-                    crawlerLog.info('Switching to 48 view mode...');
-                    await btn.click();
-                    await page.waitForTimeout(15000);
-                    break;
-                }
-            }
+            await page.waitForSelector('.option-list .select > button', { timeout: 30000 });
+            await page.click('.option-list .select > button');
+            await page.waitForSelector('.option-list ul li', { timeout: 15000 });
+            await page.click('li button[data-viewcnt="48"]');
+            await page.waitForTimeout(10000);
         } catch (err) {
             crawlerLog.warning('Failed to switch to 48 view mode. Continuing without it.');
+        }
+
+        if (BRAND_LETTER) {
+            try {
+                await page.waitForSelector('.alpabet-wrap', { timeout: 15000 });
+                const selector = `.alpabet-wrap button[value="${BRAND_LETTER.toUpperCase()}"]`;
+                const button = await page.$(selector);
+                if (button) {
+                    crawlerLog.info(`Filtering by brand starting with '${BRAND_LETTER}'`);
+                    await button.click();
+                    await page.waitForTimeout(10000);
+                    await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 60000 });
+                } else {
+                    crawlerLog.warning(`No filter button found for brand letter: ${BRAND_LETTER}`);
+                }
+            } catch (e) {
+                crawlerLog.warning(`Failed to filter by brand letter '${BRAND_LETTER}': ${e.message}`);
+            }
         }
 
         try {
@@ -62,6 +75,11 @@ const crawler = new PuppeteerCrawler({
         }
 
         while (true) {
+            if (collectedData.length >= MAX_PRODUCTS) {
+                crawlerLog.warning(`Reached max scrape limit of ${MAX_PRODUCTS} products.`);
+                break;
+            }
+
             const moreBtn = await page.$('.more .btn');
             if (!moreBtn) {
                 crawlerLog.info('No MORE button found. Assuming all products are loaded.');
@@ -73,7 +91,7 @@ const crawler = new PuppeteerCrawler({
 
             crawlerLog.info('Clicking MORE button...');
             await moreBtn.evaluate(el => el.click());
-            
+
             let retries = 5;
             while (retries > 0) {
                 try {
@@ -107,17 +125,21 @@ const crawler = new PuppeteerCrawler({
             return rows;
         });
 
-        crawlerLog.info(`Extracted total ${data.length} products.`);
+        crawlerLog.info(`Extracted ${data.length} products from this run.`);
         collectedData.push(...data);
+
+        if (collectedData.length >= MAX_PRODUCTS) {
+            crawlerLog.info(`Stopping early after collecting ${collectedData.length} products.`);
+        }
     },
 });
 
 await crawler.run([START_URL]);
 
 const csvHeader = 'url,brand,product';
-const csvRows = collectedData.map(r => `${r.url},${r.brand},${r.product}`);
+const csvRows = collectedData.slice(0, MAX_PRODUCTS).map(r => `${r.url},${r.brand},${r.product}`);
 fs.writeFileSync(filePath, [csvHeader, ...csvRows].join('\n'));
 
 crawlerLog.info(`✅ File saved to ${filePath}`);
-await Actor.pushData(collectedData);
+await Actor.pushData(collectedData.slice(0, MAX_PRODUCTS));
 await Actor.exit();

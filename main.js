@@ -41,7 +41,7 @@ const crawler = new PuppeteerCrawler({
             await page.click('.opt-sort .option-btn');
             await page.waitForSelector('.opt-sort .option-list button[data-value="48"]', { timeout: 5000 });
             await page.click('.opt-sort .option-list button[data-value="48"]');
-            await page.waitForTimeout(4000);
+            await page.waitForTimeout(6000);
         } catch (err) {
             log.warning('Failed to switch to 48 view mode. Continuing without it.');
         }
@@ -53,7 +53,7 @@ const crawler = new PuppeteerCrawler({
             const moreBtn = await page.$('.more .btn');
             if (!moreBtn) break;
             await moreBtn.evaluate(el => el.click());
-            await page.waitForTimeout(3000);
+            await page.waitForTimeout(6000); // Adjusted delay for slow loading
             await page.evaluate(() => window.scrollBy(0, 1000));
             tries++;
             log.info(`Clicked MORE button [${tries}]`);
@@ -62,7 +62,7 @@ const crawler = new PuppeteerCrawler({
             lastCount = newCount;
         }
 
-        await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 60000 });
+        await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 100000 });
 
         const data = await page.evaluate(() => {
             const rows = [];

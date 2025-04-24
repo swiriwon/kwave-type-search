@@ -20,7 +20,6 @@ const outputFolder = '/home/myuser/app/output/';
 const filePath = path.join(outputFolder, 'product_names.csv');
 
 if (!fs.existsSync(outputFolder)) {
-    crawlerLog.info(`Creating directory: ${outputFolder}`);
     fs.mkdirSync(outputFolder, { recursive: true });
 }
 
@@ -62,52 +61,54 @@ const crawler = new PuppeteerCrawler({
             return;
         }
 
-        let retries = 3;
-        let lastCount = 0;
-
-        while (retries > 0) {
-            crawlerLog.info('Extracting data...');
-
-            const data = await page.evaluate(() => {
-                const rows = [];
-                document.querySelectorAll('.prd-unit').forEach((unit) => {
-                    const brand = unit.querySelector('.brand-info dt')?.innerText?.trim() || '';
-                    const product = unit.querySelector('.brand-info dd')?.innerText?.trim() || '';
-                    if (brand && product) {
-                        rows.push({ url: window.location.href, brand, product });
-                    }
-                });
-                return rows;
-            });
-
-            crawlerLog.info(`Extracted ${data.length} products.`);
-            const newCount = collectedData.length + data.length;
-            collectedData.push(...data);
-
+        while (true) {
             const moreBtn = await page.$('.more .btn');
-            if (!moreBtn) break;
+            if (!moreBtn) {
+                crawlerLog.info('No MORE button found. Assuming all products are loaded.');
+                break;
+            }
+
+            const prevCount = await page.$$eval('.prd-unit', els => els.length);
+            crawlerLog.info(`Current product count: ${prevCount}`);
 
             crawlerLog.info('Clicking MORE button...');
             await moreBtn.evaluate(el => el.click());
-            await page.waitForTimeout(10000);
-
-            try {
-                await page.waitForFunction(
-                    (prev) => document.querySelectorAll('.prd-unit').length > prev,
-                    { timeout: 150000 },
-                    newCount
-                );
-            } catch (e) {
-                retries--;
-                crawlerLog.warning(`Retrying load after MORE button. Retries left: ${retries}`);
-                if (retries === 0) {
-                    crawlerLog.warning('Assuming no more products or page stuck. Exiting loop.');
+            
+            let retries = 5;
+            while (retries > 0) {
+                try {
+                    await page.waitForFunction(
+                        (count) => document.querySelectorAll('.prd-unit').length > count,
+                        { timeout: 20000 },
+                        prevCount
+                    );
+                    crawlerLog.info('New products loaded.');
                     break;
+                } catch (err) {
+                    retries--;
+                    crawlerLog.warning(`Products not fully loaded yet. Retries left: ${retries}`);
+                    await page.waitForTimeout(5000);
+                    if (retries === 0) crawlerLog.warning('Moving on despite possible missing products.');
                 }
             }
         }
 
-        crawlerLog.info('Finished loading all products.');
+        crawlerLog.info('Extracting product data...');
+
+        const data = await page.evaluate(() => {
+            const rows = [];
+            document.querySelectorAll('.prd-unit').forEach((unit) => {
+                const brand = unit.querySelector('.brand-info dt')?.innerText?.trim() || '';
+                const product = unit.querySelector('.brand-info dd')?.innerText?.trim() || '';
+                if (brand && product) {
+                    rows.push({ url: window.location.href, brand, product });
+                }
+            });
+            return rows;
+        });
+
+        crawlerLog.info(`Extracted total ${data.length} products.`);
+        collectedData.push(...data);
     },
 });
 

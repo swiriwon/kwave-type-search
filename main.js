@@ -33,8 +33,8 @@ const crawler = new PuppeteerCrawler({
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         }
     },
-    requestHandlerTimeoutSecs: 1200,
-    navigationTimeoutSecs: 180,
+    requestHandlerTimeoutSecs: 1800,
+    navigationTimeoutSecs: 300,
     async requestHandler({ page, request }) {
         crawlerLog.info(`Processing ${request.url}`);
 
@@ -51,17 +51,19 @@ const crawler = new PuppeteerCrawler({
                 }
             }
         } catch (err) {
-            crawlerLog.warn('Failed to switch to 48 view mode. Continuing without it.');
+            crawlerLog.warning('Failed to switch to 48 view mode. Continuing without it.');
         }
 
         try {
-            await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 90000 });
+            await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 120000 });
         } catch (e) {
             crawlerLog.error(`Failed on ${request.url}: ${e.message}`);
             return;
         }
 
         let retries = 3;
+        let lastCount = 0;
+
         while (retries > 0) {
             crawlerLog.info('Extracting data...');
 
@@ -78,6 +80,7 @@ const crawler = new PuppeteerCrawler({
             });
 
             crawlerLog.info(`Extracted ${data.length} products.`);
+            const newCount = collectedData.length + data.length;
             collectedData.push(...data);
 
             const moreBtn = await page.$('.more .btn');
@@ -85,19 +88,19 @@ const crawler = new PuppeteerCrawler({
 
             crawlerLog.info('Clicking MORE button...');
             await moreBtn.evaluate(el => el.click());
-            await page.waitForTimeout(15000);
+            await page.waitForTimeout(10000);
 
             try {
                 await page.waitForFunction(
-                    (prevCount) => document.querySelectorAll('.brand-info').length > prevCount,
-                    { timeout: 120000 },
-                    collectedData.length
+                    (prev) => document.querySelectorAll('.brand-info').length > prev,
+                    { timeout: 150000 },
+                    newCount
                 );
             } catch (e) {
                 retries--;
-                crawlerLog.warn(`Retrying load after MORE button. Retries left: ${retries}`);
+                crawlerLog.warning(`Retrying load after MORE button. Retries left: ${retries}`);
                 if (retries === 0) {
-                    crawlerLog.warn('Assuming no more products or page stuck. Exiting loop.');
+                    crawlerLog.warning('Assuming no more products or page stuck. Exiting loop.');
                     break;
                 }
             }
@@ -115,5 +118,4 @@ fs.writeFileSync(filePath, [csvHeader, ...csvRows].join('\n'));
 
 crawlerLog.info(`✅ File saved to ${filePath}`);
 await Actor.pushData(collectedData);
-
 await Actor.exit();

@@ -30,49 +30,48 @@ const crawler = new PuppeteerCrawler({
     launchContext: {
         launchOptions: {
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
-        }
+            args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        },
     },
     requestHandlerTimeoutSecs: 120,
-    navigationTimeoutSecs: 90,
+    navigationTimeoutSecs: 60,
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
 
-        await page.goto(request.url, { waitUntil: 'domcontentloaded' });
-        await page.waitForSelector('#categoryProductList', { timeout: 60000 });
+        await page.goto(request.url, { waitUntil: 'networkidle2' });
 
-        // Set view mode to 48 items per click (if exists)
-        const view48 = await page.$('button[data-page-size="48"]');
-        if (view48) {
-            await view48.click();
-            await page.waitForTimeout(3000);
-        }
+        await page.waitForSelector('#categoryProductList', { timeout: 30000 });
 
-        // Click MORE button repeatedly
+        await page.evaluate(() => {
+            const select = document.querySelector('select[name="rows"]');
+            if (select) select.value = "48";
+            select?.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        await page.waitForTimeout(3000);
+
+        let loadCount = 0;
         while (true) {
-            const moreBtn = await page.$('.more .btn');
-            if (!moreBtn) break;
-            await moreBtn.evaluate(btn => btn.click());
+            const moreButton = await page.$('.more .btn');
+            if (!moreButton) break;
+            await moreButton.click();
+            loadCount++;
+            log.info(`Clicked MORE button (${loadCount})`);
             await page.waitForTimeout(3000);
-
-            // Wait until products grow
-            await page.waitForFunction(() => {
-                return document.querySelectorAll('#categoryProductList > li').length > 0;
-            }, { timeout: 60000 });
         }
 
-        // Extract product data
+        await page.waitForSelector('.brand-info', { timeout: 20000 });
+
         const data = await page.evaluate(() => {
-            const items = [];
-            document.querySelectorAll('#categoryProductList > li').forEach((el) => {
-                const brand = el.querySelector('.brand-info dt')?.innerText?.trim() || '';
-                const product = el.querySelector('.brand-info dd')?.innerText?.trim() || '';
-                const href = el.querySelector('a')?.href || '';
+            const rows = [];
+            document.querySelectorAll('.brand-info').forEach((el) => {
+                const brand = el.querySelector('dt')?.innerText?.trim() || '';
+                const product = el.querySelector('dd')?.innerText?.trim() || '';
                 if (brand && product) {
-                    items.push({ url: href, brand, product });
+                    rows.push({ url: window.location.href, brand, product });
                 }
             });
-            return items;
+            return rows;
         });
 
         collectedData.push(...data);
@@ -83,9 +82,10 @@ const crawler = new PuppeteerCrawler({
 await crawler.run([START_URL]);
 
 const csvHeader = 'url,brand,product';
-const csvRows = collectedData.map(r => `${r.url},"${r.brand}","${r.product}"`);
+const csvRows = collectedData.map(r => `${r.url},${r.brand},${r.product}`);
 fs.writeFileSync(filePath, [csvHeader, ...csvRows].join('\n'));
 
 log.info(`✅ File saved to ${filePath}`);
 await Actor.pushData(collectedData);
+
 await Actor.exit();

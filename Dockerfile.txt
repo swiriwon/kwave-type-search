@@ -2,24 +2,19 @@ FROM apify/actor-node-puppeteer-chrome:18-21.1.0
 
 USER root
 
-# Remove conflicting Crawlee version (clean environment)
 RUN rm -rf /home/myuser/node_modules/crawlee
-
-# Prepare app folder
 RUN mkdir -p /home/myuser/app && chown -R myuser:myuser /home/myuser/app
 
 WORKDIR /home/myuser/app
 
 USER myuser
 
-# Copy and install deps
 COPY package*.json ./
+
 RUN npm install && \
     npm install @crawlee/puppeteer@3.13.0 --force && \
     npm list || true
 
-# Copy rest of the app
 COPY . .
 
-# Start command
 CMD ["node", "--experimental-specifier-resolution=node", "main.js"]

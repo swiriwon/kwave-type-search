@@ -31,60 +31,53 @@ const crawler = new PuppeteerCrawler({
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         }
     },
-    requestHandlerTimeoutSecs: 180,
-    navigationTimeoutSecs: 90,
+    requestHandlerTimeoutSecs: 300,
+    navigationTimeoutSecs: 120,
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
 
         try {
-            // Try selecting 48 view mode
-            const selectBox = await page.$('.select-box');
-            if (selectBox) {
-                await selectBox.click();
-                await page.waitForTimeout(1000);
-
-                const button48 = await page.$('button[data-value="48"]');
-                if (button48) {
-                    await button48.click();
-                    await page.waitForTimeout(3000);
-                } else {
-                    log.warning('Button with data-value="48" not found.');
-                }
-            } else {
-                log.warning('Select box for view mode not found.');
-            }
-
-            // Keep clicking MORE button until it's gone or max tries
-            let tries = 0;
-            while (tries < 70) {
-                const moreBtn = await page.$('.more .btn');
-                if (!moreBtn) break;
-                await moreBtn.evaluate(el => el.click());
-                await page.waitForTimeout(2500);
-                await page.evaluate(() => window.scrollBy(0, 1000));
-                tries++;
-                log.info(`Clicked MORE button [${tries}]`);
-            }
-
-            await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 30000 });
-
-            const data = await page.evaluate(() => {
-                const rows = [];
-                document.querySelectorAll('#categoryProductList .prd-unit').forEach((unit) => {
-                    const brand = unit.querySelector('.brand-info dt')?.innerText.trim() || '';
-                    const product = unit.querySelector('.brand-info dd')?.innerText.trim() || '';
-                    if (brand && product) {
-                        rows.push({ url: window.location.href, brand, product });
-                    }
-                });
-                return rows;
-            });
-
-            log.info(`Extracted ${data.length} products.`);
-            collectedData.push(...data);
+            await page.waitForSelector('.opt-sort .option-btn', { timeout: 30000 });
+            await page.click('.opt-sort .option-btn');
+            await page.waitForSelector('.opt-sort .option-list button[data-value="48"]', { timeout: 5000 });
+            await page.click('.opt-sort .option-list button[data-value="48"]');
+            await page.waitForTimeout(4000);
         } catch (err) {
-            log.error(`Failed on ${request.url}: ${err.message}`);
+            log.warning('Failed to switch to 48 view mode. Continuing without it.');
         }
+
+        let lastCount = 0;
+        let tries = 0;
+        while (tries < 70) {
+            const currentCount = await page.$$eval('#categoryProductList .prd-unit', els => els.length);
+            const moreBtn = await page.$('.more .btn');
+            if (!moreBtn) break;
+            await moreBtn.evaluate(el => el.click());
+            await page.waitForTimeout(3000);
+            await page.evaluate(() => window.scrollBy(0, 1000));
+            tries++;
+            log.info(`Clicked MORE button [${tries}]`);
+            const newCount = await page.$$eval('#categoryProductList .prd-unit', els => els.length);
+            if (newCount <= lastCount) break;
+            lastCount = newCount;
+        }
+
+        await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 60000 });
+
+        const data = await page.evaluate(() => {
+            const rows = [];
+            document.querySelectorAll('#categoryProductList .prd-unit').forEach((unit) => {
+                const brand = unit.querySelector('.brand-info dt')?.innerText.trim() || '';
+                const product = unit.querySelector('.brand-info dd')?.innerText.trim() || '';
+                if (brand && product) {
+                    rows.push({ url: window.location.href, brand, product });
+                }
+            });
+            return rows;
+        });
+
+        log.info(`Extracted ${data.length} products.`);
+        collectedData.push(...data);
     },
 });
 

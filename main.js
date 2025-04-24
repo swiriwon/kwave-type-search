@@ -69,9 +69,9 @@ const crawler = new PuppeteerCrawler({
 
             const data = await page.evaluate(() => {
                 const rows = [];
-                document.querySelectorAll('.brand-info').forEach((el) => {
-                    const brand = el.querySelector('dt')?.innerText?.trim() || '';
-                    const product = el.querySelector('dd')?.innerText?.trim() || '';
+                document.querySelectorAll('.prd-unit').forEach((unit) => {
+                    const brand = unit.querySelector('.brand-info dt')?.innerText?.trim() || '';
+                    const product = unit.querySelector('.brand-info dd')?.innerText?.trim() || '';
                     if (brand && product) {
                         rows.push({ url: window.location.href, brand, product });
                     }
@@ -92,7 +92,7 @@ const crawler = new PuppeteerCrawler({
 
             try {
                 await page.waitForFunction(
-                    (prev) => document.querySelectorAll('.brand-info').length > prev,
+                    (prev) => document.querySelectorAll('.prd-unit').length > prev,
                     { timeout: 150000 },
                     newCount
                 );

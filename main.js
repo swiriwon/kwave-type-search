@@ -31,29 +31,29 @@ const crawler = new PuppeteerCrawler({
             args: ['--no-sandbox', '--disable-setuid-sandbox']
         }
     },
-    requestHandlerTimeoutSecs: 120,
-    navigationTimeoutSecs: 60,
+    requestHandlerTimeoutSecs: 180,
+    navigationTimeoutSecs: 90,
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
 
-        await page.waitForSelector('.option-list button', { timeout: 30000 });
-        await page.click('.option-list button');
+        try {
+            await page.waitForSelector('.option-box .select-box', { timeout: 30000 });
+            await page.click('.option-box .select-box');
 
-        const option48Selector = '.option-list li button[data-value="48"]';
-        await page.waitForSelector(option48Selector, { timeout: 10000 });
-        await page.click(option48Selector);
-        await page.waitForTimeout(3000);
+            const option48Selector = '.option-list button[data-value="48"]';
+            await page.waitForSelector(option48Selector, { timeout: 10000 });
+            await page.click(option48Selector);
+            await page.waitForTimeout(5000);
+        } catch (e) {
+            log.warning('Failed to switch to 48 view mode. Continuing without it.');
+        }
 
-        let loadMoreVisible = true;
-        while (loadMoreVisible) {
+        while (true) {
             const moreBtn = await page.$('.more .btn');
-            if (moreBtn) {
-                log.info('Clicking MORE button...');
-                await moreBtn.click();
-                await page.waitForTimeout(3000);
-            } else {
-                loadMoreVisible = false;
-            }
+            if (!moreBtn) break;
+            log.info('Clicking MORE button...');
+            await moreBtn.click();
+            await page.waitForTimeout(3000);
         }
 
         await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 30000 });

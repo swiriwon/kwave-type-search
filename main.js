@@ -61,7 +61,8 @@ const crawler = new PuppeteerCrawler({
             return;
         }
 
-        while (true) {
+        let retries = 3;
+        while (retries > 0) {
             crawlerLog.info('Extracting data...');
 
             const data = await page.evaluate(() => {
@@ -88,13 +89,17 @@ const crawler = new PuppeteerCrawler({
 
             try {
                 await page.waitForFunction(
-                    (previousCount) => document.querySelectorAll('.brand-info').length > previousCount,
-                    { timeout: 90000 },
+                    (prevCount) => document.querySelectorAll('.brand-info').length > prevCount,
+                    { timeout: 120000 },
                     collectedData.length
                 );
             } catch (e) {
-                crawlerLog.warn('Timeout after clicking MORE, assuming no more products or very slow load.');
-                break;
+                retries--;
+                crawlerLog.warn(`Retrying load after MORE button. Retries left: ${retries}`);
+                if (retries === 0) {
+                    crawlerLog.warn('Assuming no more products or page stuck. Exiting loop.');
+                    break;
+                }
             }
         }
 

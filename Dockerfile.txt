@@ -1,5 +1,6 @@
-FROM apify/actor-node-puppeteer:16
+FROM apify/actor-node-puppeteer-chrome:18-21.1.0
 
 COPY . ./
 RUN npm install
+
 CMD ["npm", "start"]

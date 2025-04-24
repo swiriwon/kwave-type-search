@@ -30,54 +30,54 @@ const crawler = new PuppeteerCrawler({
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
         },
     },
-    requestHandlerTimeoutSecs: 180,
-    navigationTimeoutSecs: 90,
+    requestHandlerTimeoutSecs: 300,
+    navigationTimeoutSecs: 120,
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
+        await page.goto(request.url, { waitUntil: 'networkidle2' });
+
         await page.waitForSelector('.prd_list_area', { timeout: 30000 });
 
-        let prevCount = 0;
+        // Set 48 items per view if selector exists
+        const view48 = await page.$('button[title="48개씩 보기"]');
+        if (view48) {
+            log.info('Switching to 48 items per view...');
+            await view48.click();
+            await page.waitForTimeout(3000);
+        }
 
         while (true) {
             await page.waitForSelector('.brand-info', { timeout: 30000 });
 
-            const products = await page.$$('.brand-info');
-            const currentCount = products.length;
+            const data = await page.evaluate(() => {
+                const rows = [];
+                document.querySelectorAll('.brand-info').forEach((el) => {
+                    const brand = el.querySelector('dt')?.innerText?.trim() || '';
+                    const product = el.querySelector('dd')?.innerText?.trim() || '';
+                    if (brand && product) {
+                        rows.push({ url: window.location.href, brand, product });
+                    }
+                });
+                return rows;
+            });
 
-            log.info(`Found ${currentCount} items...`);
+            collectedData.push(...data);
 
-            if (currentCount > prevCount) {
-                prevCount = currentCount;
-            } else {
-                log.info('No new items loaded, exiting loop.');
+            const moreText = await page.$eval('.more .count', el => el.textContent.trim()).catch(() => '');
+            const moreBtn = await page.$('.more .btn');
+
+            log.info(`Loaded: ${moreText}`);
+            if (moreText.includes('43 / 43') || !moreBtn) {
+                log.info('Reached final batch. Exiting...');
                 break;
             }
 
-            const moreBtn = await page.$('.more .btn:not(.disabled)');
-            if (!moreBtn) {
-                log.info('MORE button not found or disabled.');
-                break;
-            }
-
+            log.info('Clicking MORE button...');
             await moreBtn.evaluate(el => el.click());
-            await page.waitForTimeout(2000);
+            await page.waitForTimeout(3000);
         }
 
-        // Final collection
-        const data = await page.evaluate(() => {
-            const rows = [];
-            document.querySelectorAll('.brand-info').forEach((el) => {
-                const brand = el.querySelector('dt')?.innerText?.trim() || '';
-                const product = el.querySelector('dd')?.innerText?.trim() || '';
-                if (brand && product) {
-                    rows.push({ url: window.location.href, brand, product });
-                }
-            });
-            return rows;
-        });
-
-        collectedData.push(...data);
-        log.info(`Collected ${data.length} products`);
+        log.info(`Finished collecting items.`);
     },
 });
 

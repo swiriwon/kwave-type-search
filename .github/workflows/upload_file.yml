@@ -1,0 +1,27 @@
+name: Upload CSV to GitHub
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/output/*'
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+
+      - name: Set up Git
+        run: |
+          git config --global user.name 'Your Name'
+          git config --global user.email 'your-email@example.com'
+
+      - name: Add CSV to output folder and push
+        run: |
+          git add app/output/scraping_data_*.csv
+          git commit -m "Add scraping data CSV file"
+          git push

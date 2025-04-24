@@ -1,0 +1,16 @@
+{
+  "name": "kwave-review-scraper",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node main.js"
+  },
+  "dependencies": {
+    "apify": "^3.4.0",
+    "json2csv": "^5.0.7",
+    "csv-writer": "^1.6.0",
+    "csv-parse": "^5.5.0",
+    "crawlee": "^3.13.2",
+    "puppeteer": "^19.11.1"
+  },
+  "type": "module"
+}

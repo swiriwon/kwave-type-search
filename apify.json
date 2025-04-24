@@ -1,7 +1,0 @@
-{
-  "buildCommand": "cd type-search && npm install",
-  "startCommand": "cd type-search && node main.js",
-  "mountDir": "type-search",
-  "version": "0.1"
-}
-

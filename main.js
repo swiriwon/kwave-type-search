@@ -36,52 +36,55 @@ const crawler = new PuppeteerCrawler({
     async requestHandler({ page, request }) {
         log.info(`Processing ${request.url}`);
 
-        await page.waitForSelector('.prd_list_area', { timeout: 60000 });
-
         try {
-            await page.click('.select-box');
-            await page.waitForSelector('.option-list li button[data-value="48"]', { timeout: 10000 });
-            await page.click('.option-list li button[data-value="48"]');
-            await page.waitForTimeout(4000);
-        } catch (err) {
-            log.warn('⚠️ Failed to switch to 48 view mode. Continuing without it.');
-        }
+            await page.waitForSelector('.prd_list_area', { timeout: 60000 });
 
-        let previousCount = 0;
-        let attempts = 0;
+            // Try selecting 48 view mode
+            const selectBox = await page.$('.select-box');
+            if (selectBox) {
+                await selectBox.click();
+                await page.waitForTimeout(1000);
 
-        while (attempts < 60) {
-            const moreBtn = await page.$('.more .btn');
-            if (!moreBtn) break;
-            await moreBtn.evaluate(btn => btn.scrollIntoView());
-            await moreBtn.click();
-            await page.waitForTimeout(3000);
-
-            const currentCount = await page.$$eval('#categoryProductList .prd-unit', els => els.length);
-            if (currentCount <= previousCount) {
-                attempts++;
-            } else {
-                previousCount = currentCount;
-                attempts = 0;
-            }
-        }
-
-        await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 30000 });
-
-        const data = await page.evaluate(() => {
-            const rows = [];
-            document.querySelectorAll('#categoryProductList .prd-unit').forEach((unit) => {
-                const brand = unit.querySelector('.brand-info dt')?.innerText.trim() || '';
-                const product = unit.querySelector('.brand-info dd')?.innerText.trim() || '';
-                if (brand && product) {
-                    rows.push({ url: window.location.href, brand, product });
+                const button48 = await page.$('button[data-value="48"]');
+                if (button48) {
+                    await button48.click();
+                    await page.waitForTimeout(3000);
+                } else {
+                    log.warning('Button with data-value="48" not found.');
                 }
-            });
-            return rows;
-        });
+            } else {
+                log.warning('Select box for view mode not found.');
+            }
 
-        log.info(`Extracted ${data.length} products.`);
-        collectedData.push(...data);
+            // Keep clicking MORE button until it's gone or max tries
+            let tries = 0;
+            while (tries < 60) {
+                const moreBtn = await page.$('.more .btn');
+                if (!moreBtn) break;
+                await moreBtn.click();
+                await page.waitForTimeout(3000);
+                tries++;
+            }
+
+            await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 30000 });
+
+            const data = await page.evaluate(() => {
+                const rows = [];
+                document.querySelectorAll('#categoryProductList .prd-unit').forEach((unit) => {
+                    const brand = unit.querySelector('.brand-info dt')?.innerText.trim() || '';
+                    const product = unit.querySelector('.brand-info dd')?.innerText.trim() || '';
+                    if (brand && product) {
+                        rows.push({ url: window.location.href, brand, product });
+                    }
+                });
+                return rows;
+            });
+
+            log.info(`Extracted ${data.length} products.`);
+            collectedData.push(...data);
+        } catch (err) {
+            log.error(`Failed on ${request.url}: ${err.message}`);
+        }
     },
 });
 

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "dependencies": {
-    "apify": "^3.4.0",
+    "apify": "3.4.0",
     "@crawlee/puppeteer": "3.13.2"
   },
   "scripts": {

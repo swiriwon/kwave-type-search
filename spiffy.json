@@ -1,0 +1,26 @@
+{
+  "name": "kwave-type-search",
+  "version": "1.0",
+  "buildTag": "latest",
+  "env": null,
+  "meta": {
+    "title": "KWAVE Type Search",
+    "description": "Scrape product names and brand names from OliveYoung category pages using a dynamic 'MORE' button."
+  },
+  "input": {
+    "title": "Input Schema",
+    "type": "object",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "startUrl": {
+          "title": "Start URL",
+          "type": "string",
+          "description": "The page URL to start scraping product data from.",
+          "editor": "textfield"
+        }
+      },
+      "required": ["startUrl"]
+    }
+  }
+}

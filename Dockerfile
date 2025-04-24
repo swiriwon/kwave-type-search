@@ -12,7 +12,6 @@ USER myuser
 COPY package*.json ./
 
 RUN npm install && \
-    npm install @crawlee/puppeteer@3.13.0 --force && \
     npm list || true
 
 COPY . .

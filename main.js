@@ -9,9 +9,9 @@ await Actor.init();
 
 const input = await Actor.getInput();
 const START_URL = input.startUrl;
-const BRAND_LETTERS = input.brandLetters || ['A']; // Example: ['A', 'B', 'C']
+const BRAND_LETTERS = input.brandLetters || ['A'];
 
-if (!START_URL || typeof START_URL !== 'string' || !START_URL.startsWith('http')) {
+if (!START_URL || typeof START_URL !== 'string' || !STARTURL.startsWith('http')) {
     throw new Error('Missing or invalid input URL. Please provide a full URL in the input field as "startUrl".');
 }
 
@@ -40,6 +40,8 @@ for (const letter of BRAND_LETTERS) {
         async requestHandler({ page, request }) {
             crawlerLog.info(`Processing ${request.url} for letter ${letter}`);
 
+            await page.waitForSelector('.prd-list-area', { timeout: 60000 });
+
             try {
                 await page.waitForSelector('.option-list .select > button', { timeout: 30000 });
                 await page.click('.option-list .select > button');
@@ -51,33 +53,32 @@ for (const letter of BRAND_LETTERS) {
             }
 
             try {
-                await page.waitForSelector('.alpabet-wrap', { timeout: 15000 });
-                const alpabetBtn = await page.$(`.alpabet-wrap button[value="${letter.toUpperCase()}"]`);
-                if (alpabetBtn) {
-                    crawlerLog.info(`Expanding brand section for '${letter}'`);
-                    await alpabetBtn.click();
-                    await page.waitForTimeout(3000);
+                crawlerLog.info(`Scrolling and filtering all brands starting with '${letter}'`);
+                await page.waitForSelector('.filter-box .filter-list', { timeout: 20000 });
+                await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+                await page.waitForTimeout(3000);
 
-                    const brandLabels = await page.$$('.brand-list .checkbox input');
-                    let checked = 0;
+                const checkboxes = await page.$$('.filter-box .filter-list label');
+                let checked = 0;
 
-                    for (const checkbox of brandLabels) {
-                        const labelText = await page.evaluate(el => el.closest('label')?.innerText?.trim() || '', checkbox);
-                        if (labelText.toUpperCase().startsWith(letter.toUpperCase())) {
-                            await checkbox.evaluate(el => el.click());
-                            checked++;
+                for (const label of checkboxes) {
+                    const text = await label.evaluate(el => el.textContent?.trim().toUpperCase());
+                    if (text && text.startsWith(letter.toUpperCase())) {
+                        const checkbox = await label.$('input[type="checkbox"]');
+                        if (checkbox) {
+                            await checkbox.evaluate(cb => cb.click());
                             await page.waitForTimeout(200);
+                            checked++;
                         }
                     }
-
-                    crawlerLog.info(`Selected ${checked} brands starting with '${letter}'`);
-                    await page.waitForTimeout(10000);
-                    await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 60000 });
-                } else {
-                    crawlerLog.warning(`No A~Z button found for letter: ${letter}`);
                 }
-            } catch (e) {
-                crawlerLog.warning(`Brand checkbox filtering failed for letter '${letter}': ${e.message}`);
+
+                crawlerLog.info(`Checked ${checked} brand filters for '${letter}'`);
+                await page.waitForTimeout(10000);
+                await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 60000 });
+            } catch (err) {
+                crawlerLog.warning(`Brand sidebar filtering failed for letter '${letter}': ${err.message}`);
+                return;
             }
 
             try {

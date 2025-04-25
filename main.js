@@ -11,7 +11,7 @@ const input = await Actor.getInput();
 const START_URL = input.startUrl;
 const BRAND_LETTERS = input.brandLetters || ['A'];
 
-if (!START_URL || typeof START_URL !== 'string' || !STARTURL.startsWith('http')) {
+if (!START_URL || typeof START_URL !== 'string' || !START_URL.startsWith('http')) {
     throw new Error('Missing or invalid input URL. Please provide a full URL in the input field as "startUrl".');
 }
 

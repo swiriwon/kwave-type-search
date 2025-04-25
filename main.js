@@ -23,10 +23,12 @@ if (!fs.existsSync(outputFolder)) {
 }
 
 const MAX_PRODUCTS = 1000;
+const summaryStatus = [];
 
 for (const letter of BRAND_LETTERS) {
     const collectedData = [];
     const filePath = path.join(outputFolder, `product_names_${letter.toUpperCase()}.csv`);
+    let letterSuccess = false;
 
     const crawler = new PuppeteerCrawler({
         launchContext: {
@@ -41,32 +43,22 @@ for (const letter of BRAND_LETTERS) {
             crawlerLog.info(`Processing ${request.url} for letter ${letter}`);
 
             await page.goto(request.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-try {
-    await page.waitForFunction(() => document.readyState === 'complete', { timeout: 20000 });
-    let found = false;
-    for (let i = 0; i < 10; i++) {
-        const exists = await page.$('#categoryProductList .prd-unit, .filter-box');
-        if (exists) {
-            found = true;
-            break;
-        }
-        await page.waitForTimeout(3000);
-    }
-    if (!found) throw new Error('Product or filter UI not found');
+            try {
+                await page.waitForFunction(() => document.readyState === 'complete', { timeout: 20000 });
+                let found = false;
+                for (let i = 0; i < 10; i++) {
+                    const exists = await page.$('#categoryProductList .prd-unit, .filter-box');
+                    if (exists) {
+                        found = true;
+                        break;
+                    }
+                    await page.waitForTimeout(3000);
+                }
+                if (!found) throw new Error('Product or filter UI not found');
             } catch (e) {
-                crawlerLog.warning(`Initial load failed. Retrying once...`);
-                await page.reload({ waitUntil: 'domcontentloaded' });
-await page.waitForFunction(() => document.readyState === 'complete', { timeout: 20000 });
-let foundRetry = false;
-for (let i = 0; i < 10; i++) {
-    const existsRetry = await page.$('#categoryProductList .prd-unit, .filter-box');
-    if (existsRetry) {
-        foundRetry = true;
-        break;
-    }
-    await page.waitForTimeout(3000);
-}
-if (!foundRetry) throw new Error('Retry: Product or filter UI not found');
+                crawlerLog.error(`Initial load failed: ${e.message}`);
+                await page.screenshot({ path: path.join(outputFolder, `fail_${letter}.png`) });
+                return;
             }
 
             try {
@@ -168,10 +160,7 @@ if (!foundRetry) throw new Error('Retry: Product or filter UI not found');
 
             crawlerLog.info(`Extracted ${data.length} products for '${letter}'.`);
             collectedData.push(...data);
-
-            if (collectedData.length >= MAX_PRODUCTS) {
-                crawlerLog.info(`Stopping early after collecting ${collectedData.length} products.`);
-            }
+            letterSuccess = data.length > 0;
         },
     });
 
@@ -183,6 +172,9 @@ if (!foundRetry) throw new Error('Retry: Product or filter UI not found');
 
     crawlerLog.info(`✅ File saved to ${filePath}`);
     await Actor.pushData(collectedData.slice(0, MAX_PRODUCTS));
+
+    summaryStatus.push(`${letter}: ${letterSuccess ? '✅' : '❌'}`);
 }
 
+crawlerLog.info(`\nSummary: ${summaryStatus.join(', ')}`);
 await Actor.exit();

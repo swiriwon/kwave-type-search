@@ -41,8 +41,18 @@ for (const letter of BRAND_LETTERS) {
             crawlerLog.info(`Processing ${request.url} for letter ${letter}`);
 
             await page.goto(request.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-            try {
-                await page.waitForSelector('#categoryProductList .prd-unit, .filter-box', { timeout: 30000 });
+try {
+    await page.waitForFunction(() => document.readyState === 'complete', { timeout: 20000 });
+    let found = false;
+    for (let i = 0; i < 10; i++) {
+        const exists = await page.$('#categoryProductList .prd-unit, .filter-box');
+        if (exists) {
+            found = true;
+            break;
+        }
+        await page.waitForTimeout(3000);
+    }
+    if (!found) throw new Error('Product or filter UI not found');
             } catch (e) {
                 crawlerLog.warning(`Initial load failed. Retrying once...`);
                 await page.reload({ waitUntil: 'domcontentloaded' });

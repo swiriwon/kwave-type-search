@@ -40,7 +40,14 @@ for (const letter of BRAND_LETTERS) {
         async requestHandler({ page, request }) {
             crawlerLog.info(`Processing ${request.url} for letter ${letter}`);
 
-            await page.waitForSelector('.prd-list-area', { timeout: 60000 });
+            await page.goto(request.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            try {
+                await page.waitForSelector('#categoryProductList .prd-unit, .filter-box', { timeout: 30000 });
+            } catch (e) {
+                crawlerLog.warning(`Initial load failed. Retrying once...`);
+                await page.reload({ waitUntil: 'domcontentloaded' });
+                await page.waitForSelector('#categoryProductList .prd-unit, .filter-box', { timeout: 30000 });
+            }
 
             try {
                 await page.waitForSelector('.option-list .select > button', { timeout: 30000 });
@@ -84,7 +91,7 @@ for (const letter of BRAND_LETTERS) {
             try {
                 await page.waitForSelector('#categoryProductList .prd-unit', { timeout: 120000 });
             } catch (e) {
-                crawlerLog.error(`Failed on ${request.url}: ${e.message}`);
+                crawlerLog.error(`Failed to load product list on ${request.url}: ${e.message}`);
                 return;
             }
 

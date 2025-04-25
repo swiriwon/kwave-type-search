@@ -56,7 +56,17 @@ try {
             } catch (e) {
                 crawlerLog.warning(`Initial load failed. Retrying once...`);
                 await page.reload({ waitUntil: 'domcontentloaded' });
-                await page.waitForSelector('#categoryProductList .prd-unit, .filter-box', { timeout: 30000 });
+await page.waitForFunction(() => document.readyState === 'complete', { timeout: 20000 });
+let foundRetry = false;
+for (let i = 0; i < 10; i++) {
+    const existsRetry = await page.$('#categoryProductList .prd-unit, .filter-box');
+    if (existsRetry) {
+        foundRetry = true;
+        break;
+    }
+    await page.waitForTimeout(3000);
+}
+if (!foundRetry) throw new Error('Retry: Product or filter UI not found');
             }
 
             try {
